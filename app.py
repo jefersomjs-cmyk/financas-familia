@@ -4,8 +4,10 @@ import pandas as pd
 from datetime import datetime
 import plotly.express as px
 
+
 # Configuração da página
 st.set_page_config(page_title="Finanças Família", layout="wide", page_icon="💰")
+
 
 # Conectar com o Google Sheets
 try:
@@ -14,8 +16,10 @@ except Exception as e:
     st.error("Erro ao conectar ao Google Sheets. Verifique suas configurações de Secrets.")
     st.stop()
 
+
 # Título
 st.title("👨‍👩‍👧 Controle Financeiro Familiar")
+
 
 # --- ENTRADA DE DADOS ---
 with st.sidebar:
@@ -29,6 +33,7 @@ with st.sidebar:
         valor = st.number_input("Valor R$", min_value=0.0, format="%.2f")
         parc = st.number_input("Qtd Parcelas (se crédito)", min_value=1, value=1)
         enviar = st.form_submit_button("Registrar")
+
 
         if enviar:
             if desc and valor > 0:
@@ -52,19 +57,20 @@ with st.sidebar:
                     })
                 
                 try:
-                    df_existente = conn.read(worksheet="Página1")
+                    df_existente = conn.read(worksheet="Pagina1")
                     df_novo = pd.DataFrame(novos_dados)
                     df_final = pd.concat([df_existente, df_novo], ignore_index=True)
-                    conn.update(worksheet="Página1", data=df_final)
+                    conn.update(worksheet="Pagina1", data=df_final)
                     st.success(f"Lançamento de '{desc}' processado com sucesso!")
                 except Exception as e:
                     st.error(f"Erro ao salvar dados: {e}")
             else:
                 st.warning("Por favor, preencha a descrição e o valor.")
 
+
 # --- VISUALIZAÇÃO ---
 try:
-    df = conn.read(worksheet="Página1")
+    df = conn.read(worksheet="Pagina1")
     if not df.empty:
         # Filtro de Mês de Referência
         meses_disponiveis = sorted(df['Mes_Referencia'].unique(), reverse=True)
@@ -91,10 +97,3 @@ try:
             fig_cat = px.bar(df_mes[df_mes['Tipo'] != 'Receita/Salário'].groupby('Categoria')['Valor'].sum().reset_index(), 
                             x='Categoria', y='Valor', title="Gastos por Categoria")
             st.plotly_chart(fig_cat, use_container_width=True)
-            
-        st.subheader("📅 Detalhes dos Lançamentos")
-        st.dataframe(df_mes.sort_values("Data"), use_container_width=True)
-    else:
-        st.info("Nenhum dado encontrado. Comece registrando um gasto ou receita no menu lateral!")
-except Exception as e:
-    st.info("Aguardando os primeiros dados serem registrados...")
