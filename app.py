@@ -4,23 +4,18 @@ import pandas as pd
 from datetime import datetime
 import plotly.express as px
 
-
 # Configuração da página
 st.set_page_config(page_title="Finanças Família", layout="wide", page_icon="💰")
 
-
 # Conectar com o Google Sheets
-# Nota: As credenciais devem ser configuradas no Streamlit Cloud ou localmente em .streamlit/secrets.toml
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
     st.error("Erro ao conectar ao Google Sheets. Verifique suas configurações de Secrets.")
     st.stop()
 
-
 # Título
 st.title("👨‍👩‍👧 Controle Financeiro Familiar")
-
 
 # --- ENTRADA DE DADOS ---
 with st.sidebar:
@@ -35,47 +30,41 @@ with st.sidebar:
         parc = st.number_input("Qtd Parcelas (se crédito)", min_value=1, value=1)
         enviar = st.form_submit_button("Registrar")
 
-
-    if enviar:
-        if desc and valor > 0:
-            novos_dados = []
-            for i in range(parc):
-                # Lógica de cálculo do mês de referência
-                mes_total = data.month + i - 1
-                mes_ref = (mes_total % 12) + 1
-                ano_ref = data.year + (mes_total // 12)
+        if enviar:
+            if desc and valor > 0:
+                novos_dados = []
+                for i in range(parc):
+                    mes_total = data.month + i - 1
+                    mes_ref = (mes_total % 12) + 1
+                    ano_ref = data.year + (mes_total // 12)
+                    valor_parc = valor / parc
+                    descricao_final = f"{desc} ({i+1}/{parc})" if parc > 1 else desc
+                    
+                    novos_dados.append({
+                        "Data": data.strftime("%Y-%m-%d"),
+                        "Descricao": descricao_final,
+                        "Responsavel": quem,
+                        "Categoria": categoria,
+                        "Tipo": tipo,
+                        "Valor": valor_parc,
+                        "Parcelas": f"{i+1}/{parc}",
+                        "Mes_Referencia": f"{ano_ref}-{mes_ref:02d}"
+                    })
                 
-                valor_parc = valor / parc
-                descricao_final = f"{desc} ({i+1}/{parc})" if parc > 1 else desc
-                
-                novos_dados.append({
-                    "Data": data.strftime("%Y-%m-%d"),
-                    "Descricao": descricao_final,
-                    "Responsavel": quem,
-                    "Categoria": categoria,
-                    "Tipo": tipo,
-                    "Valor": valor_parc,
-                    "Parcelas": f"{i+1}/{parc}",
-                    "Mes_Referencia": f"{ano_ref}-{mes_ref:02d}"
-                })
-            
-            # Ler dados atuais para anexar os novos
-            try:
-                df_existente = conn.read(worksheet="Página1")
-                df_novo = pd.DataFrame(novos_dados)
-                df_final = pd.concat([df_existente, df_novo], ignore_index=True)
-                conn.update(worksheet="Página1", data=df_final)
-                st.success(f"Lançamento de '{desc}' processado com sucesso!")
-            except Exception as e:
-                st.error(f"Erro ao salvar dados: {e}")
-        else:
-            st.warning("Por favor, preencha a descrição e o valor.")
-
+                try:
+                    df_existente = conn.read(worksheet="Página1")
+                    df_novo = pd.DataFrame(novos_dados)
+                    df_final = pd.concat([df_existente, df_novo], ignore_index=True)
+                    conn.update(worksheet="Página1", data=df_final)
+                    st.success(f"Lançamento de '{desc}' processado com sucesso!")
+                except Exception as e:
+                    st.error(f"Erro ao salvar dados: {e}")
+            else:
+                st.warning("Por favor, preencha a descrição e o valor.")
 
 # --- VISUALIZAÇÃO ---
 try:
     df = conn.read(worksheet="Página1")
-    
     if not df.empty:
         # Filtro de Mês de Referência
         meses_disponiveis = sorted(df['Mes_Referencia'].unique(), reverse=True)
@@ -84,8 +73,8 @@ try:
         df_mes = df[df['Mes_Referencia'] == mes_selecionado]
         
         st.subheader(f"📊 Resumo de {mes_selecionado}")
-        
         col1, col2, col3 = st.columns(3)
+        
         receita = df_mes[df_mes['Tipo'] == 'Receita/Salário']['Valor'].sum()
         despesa = df_mes[df_mes['Tipo'] != 'Receita/Salário']['Valor'].sum()
         saldo = receita - despesa
@@ -95,5 +84,17 @@ try:
         col3.metric("Saldo Final", f"R$ {saldo:,.2f}", delta="No Azul" if saldo > 0 else "No Vermelho")
         
         c1, c2 = st.columns(2)
-        
         with c1:
+            fig_resp = px.pie(df_mes[df_mes['Tipo'] != 'Receita/Salário'], values='Valor', names='Responsavel', title="Gastos por Pessoa")
+            st.plotly_chart(fig_resp, use_container_width=True)
+        with c2:
+            fig_cat = px.bar(df_mes[df_mes['Tipo'] != 'Receita/Salário'].groupby('Categoria')['Valor'].sum().reset_index(), 
+                            x='Categoria', y='Valor', title="Gastos por Categoria")
+            st.plotly_chart(fig_cat, use_container_width=True)
+            
+        st.subheader("📅 Detalhes dos Lançamentos")
+        st.dataframe(df_mes.sort_values("Data"), use_container_width=True)
+    else:
+        st.info("Nenhum dado encontrado. Comece registrando um gasto ou receita no menu lateral!")
+except Exception as e:
+    st.info("Aguardando os primeiros dados serem registrados...")
